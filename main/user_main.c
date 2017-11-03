@@ -38,6 +38,11 @@ some pictures of cats.
 #include "freertos/event_groups.h"
 #include "esp_log.h"
 #include "esp_event_loop.h"
+#include "nvs_flash.h"
+#include "esp_event_loop.h"
+#include "tcpip_adapter.h"
+
+
 #endif
 
 #define TAG "user_main"
@@ -220,16 +225,13 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
 
 
 //Simple task to connect to an access point
-void ICACHE_FLASH_ATTR tskconnect(void *pvParameters) {
-	//Wait a few secs for the stack to settle down
-	vTaskDelay(3000/portTICK_RATE_MS);
+void ICACHE_FLASH_ATTR init_wifi(bool modeAP) {
+	nvs_flash_init();
 
 	wifi_sta_event_group = xEventGroupCreate();
 	wifi_ap_event_group = xEventGroupCreate();
 
-	tcpip_adapter_init();
-
-        ESP_ERROR_CHECK( esp_event_loop_init(wifi_event_handler, NULL) );
+	ESP_ERROR_CHECK( esp_event_loop_init(wifi_event_handler, NULL) );
 
 	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 	ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
@@ -237,20 +239,34 @@ void ICACHE_FLASH_ATTR tskconnect(void *pvParameters) {
 
 	//Go to station mode
 	esp_wifi_disconnect();
-	esp_wifi_set_mode(WIFI_MODE_STA);
 
-	//Connect to the defined access point.
-	wifi_config_t config;
-	memset(&config, 0, sizeof(config));
-	sprintf((char*)config.sta.ssid, "mylinksys");
-	sprintf((char*)config.sta.password, "yourmomma");
-	esp_wifi_set_config(WIFI_IF_STA, &config);
-	esp_wifi_connect();
+	if(modeAP) {
+		ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_AP) );
+		
+		wifi_config_t ap_config;
+		strcpy((char*)(&ap_config.ap.ssid), "ESP");
+		ap_config.ap.ssid_len = 3;
+		ap_config.ap.channel = 1;
+		ap_config.ap.authmode = WIFI_AUTH_OPEN;
+		ap_config.ap.ssid_hidden = 0;
+		ap_config.ap.max_connection = 1;
+		ap_config.ap.beacon_interval = 100;
+		
+		esp_wifi_set_config(WIFI_IF_AP, &ap_config);
+	}
+	else {
+		esp_wifi_set_mode(WIFI_MODE_STA);
+
+		//Connect to the defined access point.
+		wifi_config_t config;
+		memset(&config, 0, sizeof(config));
+		sprintf((char*)config.sta.ssid, "RouterSSID");			// @TODO: Changeme
+		sprintf((char*)config.sta.password, "RouterPassword"); 	// @TODO: Changeme
+		esp_wifi_set_config(WIFI_IF_STA, &config);
+		esp_wifi_connect();
+	}
 
 	ESP_ERROR_CHECK( esp_wifi_start() );
-
-	//We're done. Delete this task.
-	vTaskDelete(NULL);
 }
 #endif
 
@@ -260,10 +276,9 @@ void app_main(void) {
 #else
 void user_init(void) {
 #endif
+
 #ifndef ESP32
 	uart_div_modify(0, UART_CLK_FREQ / 115200);
-#else
-	xTaskCreate(tskconnect, "tskconnect", 3000, NULL, 3, NULL);
 #endif
 
 	ioInit();
@@ -271,7 +286,11 @@ void user_init(void) {
 //	captdnsInit();
 
 	espFsInit((void*)(webpages_espfs_start));
+
+	tcpip_adapter_init();
 	httpdInit(builtInUrls, 80, HTTPD_FLAG_NONE);
+
+	init_wifi(true); // Supply false for STA mode
 
 	xTaskCreate(websocketBcast, "wsbcast", 3000, NULL, 3, NULL);
 
