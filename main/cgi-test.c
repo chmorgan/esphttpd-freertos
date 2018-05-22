@@ -28,7 +28,7 @@ CgiStatus ICACHE_FLASH_ATTR cgiTestbed(HttpdConnData *connData) {
 	int l, x;
 	TestbedState *state=(TestbedState*)connData->cgiData;
 
-	if (connData->conn==NULL) {
+	if (connData->isConnectionClosed) {
 		//Connection aborted. Clean up.
 		if (state) free(state);
 		return HTTPD_CGI_DONE;
@@ -69,15 +69,15 @@ CgiStatus ICACHE_FLASH_ATTR cgiTestbed(HttpdConnData *connData) {
 		}
 	}
 	if (connData->requestType==HTTPD_METHOD_POST) {
-		if (connData->post->len!=connData->post->received) {
+		if (connData->post.len!=connData->post.received) {
 			//Still receiving data. Ignore this.
-			printf("Test: got %d/%d bytes\n", connData->post->received, connData->post->len);
+			printf("Test: got %d/%d bytes\n", connData->post.received, connData->post.len);
 			return HTTPD_CGI_MORE;
 		} else {
 			httpdStartResponse(connData, 200);
 			httpdHeader(connData, "content-type", "text/plain");
 			httpdEndHeaders(connData);
-			l=sprintf(buff, "%d", connData->post->received);
+			l=sprintf(buff, "%d", connData->post.received);
 			httpdSend(connData, buff, l);
 			return HTTPD_CGI_DONE;
 		}

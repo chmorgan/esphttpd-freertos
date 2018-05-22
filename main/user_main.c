@@ -24,6 +24,8 @@ the server, including WiFi connection management capabilities, some IO etc.
 #include "libesphttpd/captdns.h"
 #include "libesphttpd/webpages-espfs.h"
 #include "libesphttpd/cgiwebsocket.h"
+#include "libesphttpd/httpd-freertos.h"
+#include "libesphttpd/route.h"
 #include "cgi-test.h"
 
 #include "esp_wifi.h"
@@ -45,6 +47,12 @@ the server, including WiFi connection management capabilities, some IO etc.
 #endif
 
 #define TAG "user_main"
+
+#define LISTEN_PORT     80u
+#define MAX_CONNECTIONS 32u
+
+static char connectionMemory[sizeof(RtosConnType) * MAX_CONNECTIONS];
+static HttpdFreertosInstance httpdFreertosInstance;
 
 //Function that tells the authentication system what users/passwords live on the system.
 //This is disabled in the default build; if you want to try it, enable the authBasic line in
@@ -71,7 +79,10 @@ static void websocketBcast(void *arg) {
 	while(1) {
 		ctr++;
 		sprintf(buff, "Up for %d minutes %d seconds!\n", ctr/60, ctr%60);
-		cgiWebsockBroadcast("/websocket/ws.cgi", buff, strlen(buff), WEBSOCK_FLAG_NONE);
+		cgiWebsockBroadcast(&httpdFreertosInstance.httpdInstance,
+		                    "/websocket/ws.cgi", buff, strlen(buff),
+		                    WEBSOCK_FLAG_NONE);
+
 		vTaskDelay(1000/portTICK_RATE_MS);
 	}
 }
@@ -83,19 +94,22 @@ static void myWebsocketRecv(Websock *ws, char *data, int len, int flags) {
 	sprintf(buff, "You sent: ");
 	for (i=0; i<len; i++) buff[i+10]=data[i];
 	buff[i+10]=0;
-	cgiWebsocketSend(ws, buff, strlen(buff), WEBSOCK_FLAG_NONE);
+	cgiWebsocketSend(&httpdFreertosInstance.httpdInstance,
+	                 ws, buff, strlen(buff), WEBSOCK_FLAG_NONE);
 }
 
 //Websocket connected. Install reception handler and send welcome message.
 static void myWebsocketConnect(Websock *ws) {
 	ws->recvCb=myWebsocketRecv;
-	cgiWebsocketSend(ws, "Hi, Websocket!", 14, WEBSOCK_FLAG_NONE);
+	cgiWebsocketSend(&httpdFreertosInstance.httpdInstance,
+	                 ws, "Hi, Websocket!", 14, WEBSOCK_FLAG_NONE);
 }
 
 //On reception of a message, echo it back verbatim
 void myEchoWebsocketRecv(Websock *ws, char *data, int len, int flags) {
 	printf("EchoWs: echo, len=%d\n", len);
-	cgiWebsocketSend(ws, data, len, flags);
+	cgiWebsocketSend(&httpdFreertosInstance.httpdInstance,
+	                 ws, data, len, flags);
 }
 
 //Echo websocket connected. Install reception handler.
@@ -218,6 +232,7 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
         xEventGroupClearBits(wifi_ap_event_group, CONNECTED_BIT);
         break;
     case SYSTEM_EVENT_SCAN_DONE:
+        wifiScanDoneCb();
         break;
     default:
         break;
@@ -290,7 +305,12 @@ void user_init(void) {
 	espFsInit((void*)(webpages_espfs_start));
 
 	tcpip_adapter_init();
-	httpdInit(builtInUrls, 80, HTTPD_FLAG_NONE);
+	httpdFreertosInit(&httpdFreertosInstance,
+	                  builtInUrls,
+	                  LISTEN_PORT,
+	                  connectionMemory,
+	                  MAX_CONNECTIONS,
+	                  HTTPD_FLAG_NONE);
 
 	init_wifi(true); // Supply false for STA mode
 

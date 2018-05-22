@@ -26,12 +26,12 @@ CgiStatus ICACHE_FLASH_ATTR cgiLed(HttpdConnData *connData) {
 	int len;
 	char buff[1024];
 
-	if (connData->conn==NULL) {
+	if (connData->isConnectionClosed) {
 		//Connection aborted. Clean up.
 		return HTTPD_CGI_DONE;
 	}
 
-	len=httpdFindArg(connData->post->buff, "led", buff, sizeof(buff));
+	len=httpdFindArg(connData->post.buff, "led", buff, sizeof(buff));
 	if (len!=0) {
 		currLedState=atoi(buff);
 		ioLed(currLedState);
