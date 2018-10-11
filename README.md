@@ -1,9 +1,10 @@
-This is an example of how to use libesphttpd with the Espressif FreeRTOS SDK.
-
+This is an example of how to use [libesphttpd](https://github.com/chmorgan/libesphttpd) with the Espressif FreeRTOS SDK [ESP-IDF](https://github.com/espressif/esp-idf).
 
 # ESP32
 
-Ensure that you have updated submodules appropriately:
+Set-up your build environment by following the [instructions](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html)
+
+After cloning this repository, ensure that you have updated submodules appropriately:
 
 ```git submodule update --init --recursive```
 
@@ -13,7 +14,7 @@ Run the esp32 makefile (make sure you enable the esphttpd component) and build
 
 Load onto your esp32 and monitor
 
-```make flash&&make monitor```
+```make flash monitor```
 
 # ESP8266
 

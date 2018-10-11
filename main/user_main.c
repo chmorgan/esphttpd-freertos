@@ -150,8 +150,10 @@ HttpdBuiltInUrl builtInUrls[]={
 
 	ROUTE_REDIRECT("/flash", "/flash/index.html"),
 	ROUTE_REDIRECT("/flash/", "/flash/index.html"),
-	ROUTE_CGI_ARG("/flash/next", cgiGetFirmwareNext, &uploadParams),
+	ROUTE_CGI("/flash/flashinfo.json", cgiGetFlashInfo),
+	ROUTE_CGI("/flash/setboot", cgiSetBoot),
 	ROUTE_CGI_ARG("/flash/upload", cgiUploadFirmware, &uploadParams),
+	ROUTE_CGI_ARG("/flash/erase", cgiEraseFlash, &uploadParams),
 	ROUTE_CGI("/flash/reboot", cgiRebootFirmware),
 
 	//Routines to make the /wifi URL and everything beneath it work.
@@ -170,9 +172,9 @@ HttpdBuiltInUrl builtInUrls[]={
 	ROUTE_WS("/websocket/ws.cgi", myWebsocketConnect),
 	ROUTE_WS("/websocket/echo.cgi", myEchoWebsocketConnect),
 
-	ROUTE_REDIRECT("/test", "/test/index.html"),
-	ROUTE_REDIRECT("/test", "/test/index.html"),
-	ROUTE_CGI("/test/test.cgi", cgiTestbed),
+	ROUTE_REDIRECT("/httptest", "/httptest/index.html"),
+	ROUTE_REDIRECT("/httptest/", "/httptest/index.html"),
+	ROUTE_CGI("/httptest/test.cgi", cgiTestbed),
 
 	ROUTE_FILESYSTEM(),
 

@@ -11,6 +11,7 @@ the nonos sdk just closes all sockets opened after the available sockets are ope
 instead of queueing them until a socket frees up.
 */
 
+var api_base = "/httptest/"
 
 function log(line) {
 	$("#log").insertAdjacentHTML('beforeend', line+'<br />');
@@ -41,7 +42,7 @@ function testParLdImg(url, ct, doneFn) {
 function testDownloadCgi(len, doneFn) {
 	var xhr=j();
 	var state={"len":len, "doneFn":doneFn, "ts": Date.now()};
-	xhr.open("GET", "test.cgi?len="+len+"&nocache="+Math.floor(Math.random()*100000).toString());
+	xhr.open("GET", api_base + "test.cgi?len="+len+"&nocache="+Math.floor(Math.random()*100000).toString());
 	xhr.onreadystatechange=function() {
 		if (xhr.readyState==4 && xhr.status>=200 && xhr.status<300) {
 			if (xhr.response.length==this.len) {
@@ -74,7 +75,7 @@ function testUploadCgi(len, doneFn) {
 	var state={"len":len, "doneFn":doneFn, "ts": Date.now()};
 	var data="";
 	for (var x=0; x<len; x++) data+="X";
-	xhr.open("POST", "test.cgi");
+	xhr.open("POST", api_base + "test.cgi");
 	xhr.onreadystatechange=function() {
 		if (xhr.readyState==4 && xhr.status>=200 && xhr.status<300) {
 			var ulen=parseInt(xhr.responseText);
@@ -108,7 +109,7 @@ function hammerNext(state, xhr) {
 		state.doneFn(!state.error);
 	}
 	if (state.started==state.count) return;
-	xhr.open("GET", "test.cgi?len="+state.len+"&nocache="+Math.floor(Math.random()*100000).toString());
+	xhr.open("GET", api_base + "test.cgi?len="+state.len+"&nocache="+Math.floor(Math.random()*100000).toString());
 	xhr.onreadystatechange=function(xhr) {
 		if (xhr.readyState==4 && xhr.status>=200 && xhr.status<300) {
 			if (xhr.response.length==this.len) {

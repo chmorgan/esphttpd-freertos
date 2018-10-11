@@ -1,10 +1,11 @@
 <html><head><title>WiFi connection</title>
-<link rel="stylesheet" type="text/css" href="style.css">
-<script type="text/javascript" src="140medley.min.js"></script>
+<link rel="stylesheet" type="text/css" href="./style.css">
+<script type="text/javascript" src="../140medley.min.js"></script>
 <script type="text/javascript">
 
 var xhr=j();
 var currAp="%currSsid%";
+var api_base = "/wifi/"
 
 function createInputForAp(ap) {
 	if (ap.essid=="" && ap.rssi==0) return;
@@ -46,7 +47,7 @@ function getSelectedEssid() {
 
 
 function scanAPs() {
-	xhr.open("GET", "wifiscan.cgi");
+	xhr.open("GET", api_base + "wifiscan.cgi");
 	xhr.onreadystatechange=function() {
 		if (xhr.readyState==4 && xhr.status>=200 && xhr.status<300) {
 			var data=JSON.parse(xhr.responseText);
@@ -80,7 +81,7 @@ Current WiFi mode: %WiFiMode%
 <p>
 Note: %WiFiapwarn%
 </p>
-<form name="wifiform" action="connect.cgi" method="post">
+<form name="wifiform" action="/wifi/connect.cgi" method="post">
 <p>
 To connect to a WiFi network, please select one of the detected networks...<br>
 <div id="aps">Scanning...</div>
