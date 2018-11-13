@@ -40,7 +40,6 @@ the server, including WiFi connection management capabilities, some IO etc.
 #include "esp_log.h"
 #include "esp_event_loop.h"
 #include "nvs_flash.h"
-#include "esp_event_loop.h"
 #include "tcpip_adapter.h"
 
 
@@ -167,6 +166,7 @@ HttpdBuiltInUrl builtInUrls[]={
 	ROUTE_CGI("/wifi/connect.cgi", cgiWiFiConnect),
 	ROUTE_CGI("/wifi/connstatus.cgi", cgiWiFiConnStatus),
 	ROUTE_CGI("/wifi/setmode.cgi", cgiWiFiSetMode),
+	ROUTE_CGI("/wifi/startwps.cgi", cgiWiFiStartWps),
 
 	ROUTE_REDIRECT("/websocket", "/websocket/index.html"),
 	ROUTE_WS("/websocket/ws.cgi", myWebsocketConnect),
@@ -196,7 +196,8 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
 {
     switch(event->event_id) {
     case SYSTEM_EVENT_STA_START:
-        esp_wifi_connect();
+        /* Calling this unconditionally would interfere with the WiFi CGI. */
+        // esp_wifi_connect();
         break;
     case SYSTEM_EVENT_STA_GOT_IP:
         xEventGroupSetBits(wifi_sta_event_group, CONNECTED_BIT);
@@ -204,10 +205,19 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
     case SYSTEM_EVENT_STA_CONNECTED:
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
+        xEventGroupClearBits(wifi_sta_event_group, CONNECTED_BIT);
         /* This is a workaround as ESP32 WiFi libs don't currently
            auto-reassociate. */
-        esp_wifi_connect();
-        xEventGroupClearBits(wifi_sta_event_group, CONNECTED_BIT);
+        /* Skip reconnect if disconnect was deliberate or authentication      *\
+        \* failed.                                                            */
+        switch(event->event_info.disconnected.reason){
+        case WIFI_REASON_ASSOC_LEAVE:
+        case WIFI_REASON_AUTH_FAIL:
+            break;
+        default:
+            esp_wifi_connect();
+            break;
+        }
         break;
     case SYSTEM_EVENT_AP_START:
     {
@@ -234,27 +244,44 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
         xEventGroupClearBits(wifi_ap_event_group, CONNECTED_BIT);
         break;
     case SYSTEM_EVENT_SCAN_DONE:
-        wifiScanDoneCb();
         break;
     default:
         break;
     }
+
+    /* Forward event to to the WiFi CGI module */
+    cgiWifiEventCb(event);
+
     return ESP_OK;
 }
 
 
 //Simple task to connect to an access point
 void ICACHE_FLASH_ATTR init_wifi(bool modeAP) {
-	nvs_flash_init();
+	esp_err_t result;
+
+	result = nvs_flash_init();
+	if(   result == ESP_ERR_NVS_NO_FREE_PAGES
+	   || result == ESP_ERR_NVS_NEW_VERSION_FOUND)
+	{
+		ESP_LOGI(TAG, "Erasing NVS");
+		nvs_flash_erase();
+		result = nvs_flash_init();
+	}
+	ESP_ERROR_CHECK(result);
 
 	wifi_sta_event_group = xEventGroupCreate();
 	wifi_ap_event_group = xEventGroupCreate();
+
+	// Initialise wifi configuration CGI
+	result = initCgiWifi();
+	ESP_ERROR_CHECK(result);
 
 	ESP_ERROR_CHECK( esp_event_loop_init(wifi_event_handler, NULL) );
 
 	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 	ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
-        ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
+	ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
 
 	//Go to station mode
 	esp_wifi_disconnect();
@@ -268,7 +295,7 @@ void ICACHE_FLASH_ATTR init_wifi(bool modeAP) {
 		ap_config.ap.channel = 1;
 		ap_config.ap.authmode = WIFI_AUTH_OPEN;
 		ap_config.ap.ssid_hidden = 0;
-		ap_config.ap.max_connection = 1;
+		ap_config.ap.max_connection = 3;
 		ap_config.ap.beacon_interval = 100;
 
 		esp_wifi_set_config(WIFI_IF_AP, &ap_config);

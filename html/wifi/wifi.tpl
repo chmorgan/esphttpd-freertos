@@ -23,10 +23,12 @@ function createInputForAp(ap) {
 	encrypt.style.backgroundPosition="-32px "+encVal+"px";
 	var input=document.createElement("input");
 	input.type="radio";
-	input.name="essid";
+	input.name="radio-essid";
 	input.value=ap.essid;
-	if (currAp==ap.essid) input.checked="1";
+	if (currAp!="" && currAp==ap.essid) input.checked="1";
 	input.id="opt-"+ap.essid;
+	input.addEventListener("change", () =>
+		{document.getElementById("txt_essid").value=ap.essid})
 	var label=document.createElement("label");
 	label.htmlFor="opt-"+ap.essid;
 	label.textContent=ap.essid;
@@ -86,8 +88,10 @@ Note: %WiFiapwarn%
 To connect to a WiFi network, please select one of the detected networks...<br>
 <div id="aps">Scanning...</div>
 <br>
-WiFi password, if applicable: <br />
-<input type="text" name="passwd" val="%WiFiPasswd%"> <br />
+Selected SSID: <br>
+<input type="text" name="essid" value="%currSsid%" id="txt_essid"> <br>
+WiFi password, if applicable: <br>
+<input type="password" name="passwd" value="%WiFiPasswd%" id="txt_passwd"> <br>
 <input type="submit" name="connect" value="Connect!">
 </p>
 </div>
