@@ -15,6 +15,7 @@ The github repository for <a href="https://github.com/chmorgan/libesphttpd">libe
 <li><a href="websocket">Websocket example</a></li>
 <li><a href="httptest">Run a test suite against the libesphttpd server</a></li>
 <li><a href="led.tpl">Control a gpio/led</a></li>
+<li><a href="filesystem">Upload files to the FAT or SPIFFS filesystem</a></li>
 </ul>
 </p>
 libesphttpd also supports https/ssl, configurable as a build time option.<br/>

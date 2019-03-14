@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel="stylesheet" type="text/css" href="../style.css">
+<style type="text/css">
+#upload-file-final-container {
+	display: none;
+}
+.txtinput {
+  font-weight: bold;
+  width: 100%;
+  clear: both;
+}
+</style>
+<script type="text/javascript" src="../140medley.min.js"></script>
+<script type="text/javascript">
+var xhr=j();
+var api_base = "/filesystem/"
+
+function openAjaxSpinner() {
+    $("#spinner").style.display = 'block';
+}
+
+function closeAjaxSpinner() {
+    $("#spinner").style.display = 'none';
+}
+
+function doCommonXHR(donecallback, successcallback) {
+	xhr.onreadystatechange=function() {
+        if (xhr.readyState==4) {
+            if (xhr.status>=200 && xhr.status<=400) {
+                var json_response = JSON.parse(xhr.responseText);
+                if (json_response.success == false) {
+                    $("#remark").innerHTML="<strong style=\"color: red;\">Error: "+xhr.responseText+"</strong>";
+                    closeAjaxSpinner();
+                } else {
+                    if (successcallback && typeof(successcallback) === "function") {successcallback(json_response);}
+                }
+            }
+            else
+            {
+                $("#remark").innerHTML="<strong style=\"color: red;\">Error!  Check connection.  HTTP status: " + xhr.status + "</strong>";
+                closeAjaxSpinner();
+            }
+            if (donecallback && typeof(donecallback) === "function") {donecallback();}
+        }
+	}
+}
+
+function doUploadPost(f, dest_path, dest_filename, use_form, callback) {
+	if (typeof f === 'undefined') {
+		$("#remark").innerHTML="<strong style=\"color: red;\">Can't read file!  Browse for file.</strong>";
+		return
+	}
+    if (typeof dest_path === 'undefined') dest_path = "";
+    if (typeof dest_filename === 'undefined') dest_filename = f.name;
+    if (use_form) {
+        var data = new FormData();
+        data.append('file', f, dest_path + dest_filename);
+        xhr.open("POST", api_base + "upload.cgi");
+    }
+    else {
+        var data = f;
+        xhr.open("POST", api_base + "upload.cgi?filename=" + encodeURIComponent(dest_path + dest_filename));
+    }
+	$("#remark").innerHTML="Uploading file: " + dest_filename + " using HTTP POST to: " + dest_path;
+    doCommonXHR(callback, function(json_response) {
+        closeAjaxSpinner();
+        $('#cancel-button').click();
+        $("#remark").innerHTML = 'Uploaded ' + json_response["bytes written"] + ' bytes to to: ' + json_response.filename + '<br/>Download: <a href="' + dest_path + dest_filename + '">' + dest_path + dest_filename + '</a>';
+    });
+    openAjaxSpinner();
+    xhr.send(data);
+	return false;
+}
+
+function doUploadPut(f, dest_path, dest_filename, callback) {
+	if (typeof f === 'undefined') {
+		$("#remark").innerHTML="<strong style=\"color: red;\">Can't read file!  Browse for file.</strong>";
+		return
+	}
+    if (typeof dest_path === 'undefined') dest_path = "/";
+    if (typeof dest_filename === 'undefined') dest_filename = f.name;
+	$("#remark").innerHTML="Uploading file: " + dest_filename + " using HTTP PUT to: " + dest_path;
+	xhr.open("PUT", dest_path + dest_filename );
+    xhr.overrideMimeType(f.type);
+    doCommonXHR(callback, function(json_response) {
+        closeAjaxSpinner();
+        $('#cancel-button').click();
+        $("#remark").innerHTML = 'Uploaded ' + json_response["bytes written"] + ' bytes to to: ' + json_response.filename + '<br/>Download: <a href="' + dest_path + dest_filename + '">' + dest_path + dest_filename + '</a>';   
+    });
+    openAjaxSpinner();
+    xhr.send(f);
+	return false;
+}
+
+// Upload button event
+function doUploadButton() {
+    // value of checked input tag having name of 'foo'
+    var selectedValue = $('#myform').method.value;
+    if (selectedValue == "POST")
+    {
+        doUploadPost($('#myform').fileinput.files[0], $('#myform').rem_path.value, $('#myform').rem_fname.value, $('#myform').use_form.checked);
+    }
+    else if (selectedValue == "PUT")
+    {
+        doUploadPut($('#myform').fileinput.files[0], $('#myform').rem_path.value, $('#myform').rem_fname.value);
+    }
+    return false;
+}
+
+// Cancel button event
+function doCancelButton() {
+    $("#remark").innerHTML= '';
+    $('#upload-choose-container').style.display = 'block';
+    $('#upload-file-final-container').style.display = 'none';
+    $('#myform').fileinput.value = null;
+}
+
+function onMethodClick() {
+    if ($('#myform').method.value == "POST") {
+        $('#post-options-container').style.display = 'block';
+    }else {
+        $('#post-options-container').style.display = 'none';
+    }
+}
+    
+window.onload=function(e) {
+    $('#myform').fileinput.value = null;
+    $("#remark").innerHTML= "";
+    onMethodClick();
+    // Validate file when a new file is selected
+    $('#myform').fileinput.addEventListener('change', function() {
+        var file = this.files[0];
+        
+        $("#remark").innerHTML= "";
+
+        // Max filesize allowed
+        var maxmb = 1;
+        if(file.size > maxmb*1024*1024) {
+            $("#remark").innerHTML= '<strong style="color: red;">Error! File size > ' + maxmb + 'MB!</strong>';
+            return;
+        }
+
+        $('#upload-choose-container').style.display = 'none';
+        $('#upload-file-final-container').style.display = 'block';
+        $('#myform').loc_fname.value = file.name;
+        $('#myform').rem_fname.value = file.name;
+    });
+}
+</script>
+</head>
+
+<body>
+<div id="main">
+    <h1>Upload to FileSystem</h1>
+    <form id="myform">
+    <p> HTTP method:<br/>
+        <b><input type="radio" name="method" value="POST" onclick="onMethodClick(this);"/>POST<br/>
+        <input type="radio" name="method" value="PUT" onclick="onMethodClick(this);" checked />PUT<br/></b>
+    </p>
+    <div id="post-options-container">
+        <input type="checkbox" name="use_form">Embed file in a form (not supported on server yet)
+    </div>
+    <p>
+        Upload to Remote Path: <input type="text" name="rem_path" class="txtinput" value="/"> (must include trailing /)
+    </p>
+    <p>
+        
+    </p>
+    <div id="upload-choose-container">
+        <input type="file" name="fileinput" />
+    </div>
+    <div id="upload-file-final-container">
+        <p>Local File Name: <input type="text" name="loc_fname" class="txtinput" disabled></p>
+        <p>Remote File Name: <input type="text" name="rem_fname" class="txtinput"></p>
+        <button type="button" id="upload-button" onClick="doUploadButton()">Upload</button>
+        <button type="button" id="cancel-button" onClick="doCancelButton()">Cancel</button>
+    </div>
+    </form>
+    <div>
+        <p id="remark">Loading...</p>
+    </div>
+    <div id="spinner"></div>
+</div>
+</body>
+</html>

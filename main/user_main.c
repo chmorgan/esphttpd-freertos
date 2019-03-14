@@ -19,6 +19,7 @@ the server, including WiFi connection management capabilities, some IO etc.
 #include "cgi.h"
 #include "libesphttpd/cgiwifi.h"
 #include "libesphttpd/cgiflash.h"
+#include "libesphttpd/esp32_httpd_vfs.h"
 #include "libesphttpd/auth.h"
 #include "libesphttpd/espfs.h"
 #include "libesphttpd/captdns.h"
@@ -41,11 +42,45 @@ the server, including WiFi connection management capabilities, some IO etc.
 #include "esp_event_loop.h"
 #include "nvs_flash.h"
 #include "tcpip_adapter.h"
-
-
 #endif
 
 #define TAG "user_main"
+
+/* The examples use simple WiFi configuration that you can set via
+   'make menuconfig'.
+
+   If you'd rather not, just change the below entries to strings with
+   the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
+*/
+#define EXAMPLE_WIFI_SSID      CONFIG_EXAMPLE_WIFI_SSID
+#define EXAMPLE_WIFI_PASS      CONFIG_EXAMPLE_WIFI_PASSWORD
+
+#ifdef CONFIG_EXAMPLE_FS_TYPE_SPIFFS
+// SPIFFS filesystem
+#warning "SPIFFS Filesystem Chosen"
+#include "esp_vfs.h"
+#include "esp_spiffs.h"
+#include "esp_partition.h"
+#elif defined CONFIG_EXAMPLE_FS_TYPE_FAT
+// FAT file-system
+#warning "FAT Filesystem Chosen"
+#include "esp_vfs.h"
+#include "esp_vfs_fat.h"
+#include "esp_partition.h"
+// Handle of the wear levelling library instance
+static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;  // needed by FAT filesystem
+
+#elif defined CONFIG_EXAMPLE_FS_TYPE_LFS
+// LittleFS Filesystem
+#warning "LittleFS Filesystem Chosen"
+#else
+#warning "No filesystem Chosen!"
+#endif
+
+// Mount path for the internal SPI-Flash file storage partition
+#define FS_BASE_PATH	"/spiflash"
+const char *base_path = FS_BASE_PATH;
+#define FS_PART_NAME	"internalfs"
 
 #define LISTEN_PORT     80u
 #define MAX_CONNECTIONS 32u
@@ -176,6 +211,23 @@ HttpdBuiltInUrl builtInUrls[]={
 	ROUTE_REDIRECT("/httptest/", "/httptest/index.html"),
 	ROUTE_CGI("/httptest/test.cgi", cgiTestbed),
 
+	ROUTE_REDIRECT("/filesystem", "/filesystem/index.html"),
+	ROUTE_REDIRECT("/filesystem/", "/filesystem/index.html"),
+
+#ifndef CONFIG_EXAMPLE_FS_TYPE_NONE // If FS not set to 'none' in menuconfig
+	// Filesystem POST/PUT handler. Allows only replacing content of one file at "/spiflash/html/writeable_file.txt".
+	ROUTE_CGI_ARG("/writeable_file.txt", cgiEspVfsUpload, FS_BASE_PATH "/html/writeable_file.txt"),
+
+	// Filesystem POST/PUT handler.  Allows creating/replacing files anywhere under "/spiflash/html/upload/".  (note trailing slash)
+	ROUTE_CGI_ARG("/filesystem/upload.cgi", cgiEspVfsUpload, FS_BASE_PATH "/html/upload/"),
+
+	// Filesystem POST/PUT handler, will fall through if http req is not PUT or POST.
+	ROUTE_CGI_ARG("*", cgiEspVfsUpload, FS_BASE_PATH "/html/"),
+
+	// Filesystem GET handler, will fall through if file not found.
+	ROUTE_CGI_ARG("*", cgiEspVfsGet, FS_BASE_PATH "/html/"),
+#endif
+	// espFs filesystem GET handler.
 	ROUTE_FILESYSTEM(),
 
 	ROUTE_END()
@@ -215,8 +267,8 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
         case WIFI_REASON_AUTH_FAIL:
             break;
         default:
-            esp_wifi_connect();
-            break;
+        esp_wifi_connect();
+        break;
         }
         break;
     case SYSTEM_EVENT_AP_START:
@@ -289,21 +341,21 @@ void ICACHE_FLASH_ATTR init_wifi(bool modeAP) {
 	if(modeAP) {
 		ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_AP) );
 
-		wifi_config_t ap_config;
-		strcpy((char*)(&ap_config.ap.ssid), "ESP");
-		ap_config.ap.ssid_len = 3;
-		ap_config.ap.channel = 1;
-		ap_config.ap.authmode = WIFI_AUTH_OPEN;
-		ap_config.ap.ssid_hidden = 0;
+	wifi_config_t ap_config;
+	strcpy((char*)(&ap_config.ap.ssid), "ESP");
+	ap_config.ap.ssid_len = 3;
+	ap_config.ap.channel = 1;
+	ap_config.ap.authmode = WIFI_AUTH_OPEN;
+	ap_config.ap.ssid_hidden = 0;
 		ap_config.ap.max_connection = 3;
-		ap_config.ap.beacon_interval = 100;
+	ap_config.ap.beacon_interval = 100;
 
-		esp_wifi_set_config(WIFI_IF_AP, &ap_config);
+	esp_wifi_set_config(WIFI_IF_AP, &ap_config);
 	}
 	else {
 		esp_wifi_set_mode(WIFI_MODE_STA);
 
-		//Connect to the defined access point.
+	//Connect to the defined access point.
 		wifi_config_t config;
 		memset(&config, 0, sizeof(config));
 		sprintf((char*)config.sta.ssid, "RouterSSID");			// @TODO: Changeme
@@ -315,6 +367,126 @@ void ICACHE_FLASH_ATTR init_wifi(bool modeAP) {
 	ESP_ERROR_CHECK( esp_wifi_start() );
 }
 #endif
+
+static void mount_fs(void)
+{
+	esp_err_t err = ESP_FAIL;
+	int f_bsize=0, f_blocks=0, f_bfree=0;
+    esp_partition_t * fs_partition = NULL;
+
+#ifndef CONFIG_EXAMPLE_FS_TYPE_NONE
+    ESP_LOGI(TAG, "Mounting Filesystem");
+    // To mount device we need name of device partition, define base_path
+    // and allow format partition in case if it is new one and was not formated before
+#endif
+
+#ifdef CONFIG_EXAMPLE_FS_TYPE_SPIFFS
+    // SPIFFS filesystem
+    fs_partition = (esp_partition_t *)esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, FS_PART_NAME);
+	if (fs_partition == NULL) {
+		ESP_LOGE(TAG, "Filesystem partition not found!");
+	}
+    esp_vfs_spiffs_conf_t conf = {
+	    .base_path = FS_BASE_PATH,
+	    .partition_label = FS_PART_NAME,
+	    .max_files = 5,
+	    .format_if_mount_failed = true
+    };
+
+    // Use settings defined above to initialize and mount SPIFFS filesystem.
+    // Note: esp_vfs_spiffs_register is an all-in-one convenience function.
+    err = esp_vfs_spiffs_register(&conf);
+
+	if (err != ESP_OK) {
+		if (err == ESP_FAIL) {
+			ESP_LOGE(TAG, "Failed to mount or format filesystem");
+		} else if (err == ESP_ERR_NOT_FOUND) {
+			ESP_LOGE(TAG, "Failed to find SPIFFS partition");
+		} else {
+			ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(err));
+		}
+		return;
+    }
+
+	size_t total = 0, used = 0;
+	err = esp_spiffs_info(FS_PART_NAME, &total, &used);
+	if (err != ESP_OK) {
+    	ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s)", esp_err_to_name(err));
+	} else {
+		f_bsize = 256;
+		f_blocks = total / 256;
+		f_bfree = (total-used) / 256;
+	}
+	ESP_LOGI(TAG, "Mounted filesystem. Type: SPIFFS");
+#elif defined CONFIG_EXAMPLE_FS_TYPE_FAT
+    // FAT file-system
+    fs_partition = (esp_partition_t *)esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, FS_PART_NAME);
+	if (fs_partition == NULL) {
+		ESP_LOGE(TAG, "Filesystem partition not found!");
+	}
+    const esp_vfs_fat_mount_config_t mount_config = {
+	    .max_files = 16,
+	    .format_if_mount_failed = true,
+	    .allocation_unit_size = 0 // will default to wear-leveling size.  Set CONFIG_WL_SECTOR_SIZE = 4096 in menuconfig for performance boost.
+    };
+    err = esp_vfs_fat_spiflash_mount(FS_BASE_PATH, FS_PART_NAME, &mount_config, &s_wl_handle);
+    if (err != ESP_OK) {
+    	ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
+    	return;
+    }
+	FATFS *fatfs;
+	DWORD fre_clust;
+	FRESULT res = f_getfree(FS_BASE_PATH, &fre_clust, &fatfs);
+	if (res != FR_OK) {
+	    ESP_LOGE(TAG, "Failed to get FAT partition information (error: %i)", res);
+	} else {
+#if FF_MAX_SS == FF_MIN_SS
+#define SECSIZE(fs) (FF_MIN_SS)
+#else
+#define SECSIZE(fs) ((fs)->ssize)
+#endif
+		f_bsize = fatfs->csize * SECSIZE(fatfs);
+		f_blocks = fatfs->n_fatent - 2;
+		f_bfree = fre_clust;
+	}
+	ESP_LOGI(TAG, "Mounted filesystem. Type: FAT");
+#elif defined CONFIG_EXAMPLE_FS_TYPE_LFS
+    // LittleFS Filesystem
+    fs_partition = (esp_partition_t *)esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, FS_PART_NAME);
+    if (fs_partition == NULL) {
+    	ESP_LOGE("Filesystem partition not found!");
+		return;
+    }
+    const little_flash_config_t little_cfg = {
+        .part = fs_partition,
+        .base_path = FS_BASE_PATH,
+        .open_files = 16,
+        .auto_format = true,
+        .lookahead = 32
+    };
+    err = littleFlash_init(&little_cfg);
+    if (err != ESP_OK) {
+		ESP_LOGE(TAG, "Failed to mount Flash partition as LittleFS.");
+		return;
+   	}
+	uint32_t used = littleFlash_getUsedBlocks();
+	f_bsize = littleFlash.lfs_cfg.block_size;
+	f_blocks = littleFlash.lfs_cfg.block_count;
+	f_bfree = f_blocks - used;
+	ESP_LOGI(TAG, "Mounted filesystem. Type: LittleFS");
+#endif
+	if (fs_partition != NULL)
+	{
+		ESP_LOGI(TAG, "Mounted on partition '%s' [size: %d; offset: 0x%6X; %s]", fs_partition->label, fs_partition->size, fs_partition->address, (fs_partition->encrypted)?"ENCRYPTED":"");
+		if (err == ESP_OK) {
+			ESP_LOGI(TAG, "----------------");
+			ESP_LOGI(TAG, "Filesystem size: %d B", f_blocks * f_bsize);
+			ESP_LOGI(TAG, "           Used: %d B", (f_blocks * f_bsize) - (f_bfree * f_bsize));
+			ESP_LOGI(TAG, "           Free: %d B", f_bfree * f_bsize);
+			ESP_LOGI(TAG, "----------------");
+		}
+	}
+}
 
 //Main routine. Initialize stdout, the I/O, filesystem and the webserver and we're done.
 #if ESP32
@@ -332,6 +504,8 @@ void user_init(void) {
 //	captdnsInit();
 
 	espFsInit((void*)(webpages_espfs_start));
+
+	mount_fs();
 
 	tcpip_adapter_init();
 	httpdFreertosInit(&httpdFreertosInstance,

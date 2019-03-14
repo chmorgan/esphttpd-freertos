@@ -16,6 +16,24 @@ Load onto your esp32 and monitor
 
 ```make flash monitor```
 
+### Using file systems
+
+* disclaimer: Althought the framework is there for SPIFFS, FatFS, and LittleFS,  I was only able to get FatFS working correctly.  Bugfixes are welcomed!
+
+Detailed information about using file systems are available from @loboris  [Wiki](https://github.com/loboris/MicroPython_ESP32_psRAM_LoBo/wiki/filesystems).
+
+The type and size of the Flash file system can be configured before the build using 
+menuconfig → Example Configuration → File systems.
+Three file system types are available: SPIFFS, FatFS and LittleFS.
+
+If using FatFS, then I recommend setting Code Page=US, Long file name support=heap, and max long file name length=127 in
+```menuconfig → Component config → FAT Filesystem support```.  FatFS uses esp-idf wear leveling.
+
+Start address in Flash and file system size are configured automatically from ```BUILD.sh``` based on Flash size, partition layout and command line options.
+
+Internal file system is mounted automatically at boot in ```/internalfs``` directory.
+If the internal file system is not formated, it will be formated automatically on first boot.
+
 # ESP8266
 
 Building for ESP8266 requires a bit more work.

@@ -1,0 +1,44 @@
+menu "Example Configuration"
+	config EXAMPLE_WIFI_SSID
+		string "WiFi SSID"
+		default "myssid"
+		help
+		SSID (network name) for the example to connect to.
+
+	config EXAMPLE_WIFI_PASSWORD
+		string "WiFi Password"
+		default "mypassword"
+		help
+		WiFi password (WPA or WPA2) for the example to use.
+	
+    config EXAMPLE_USE_OTA
+        bool "Use OTA partition layout"
+        default n
+        help
+            Use OTA partition layout and include OTA module into build
+			
+    menu "File systems"
+        config EXAMPLE_FILESYSTEM_TYPE
+            int
+            default 0 if EXAMPLE_FS_TYPE_NONE
+            default 1 if EXAMPLE_FS_TYPE_SPIFFS
+            default 2 if EXAMPLE_FS_TYPE_FAT
+            default 3 if EXAMPLE_FS_TYPE_LFS
+
+            choice
+                prompt "Set internal filesystem type"
+                default EXAMPLE_FS_TYPE_NONE
+                help
+                    Select internal file system type
+                    
+                config EXAMPLE_FS_TYPE_NONE
+                    bool "None"
+                config EXAMPLE_FS_TYPE_SPIFFS
+                    bool "SPIFFS"
+                config EXAMPLE_FS_TYPE_FAT
+                    bool "FatFS"
+                config EXAMPLE_FS_TYPE_LFS
+                    bool "LittleFS"
+            endchoice
+    endmenu
+endmenu
