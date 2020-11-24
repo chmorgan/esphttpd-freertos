@@ -39,14 +39,14 @@ function testParLdImg(url, ct, doneFn) {
 	}
 }
 
-function testDownloadCgi(len, doneFn) {
+function testDownload(path, len, doneFn) {
 	var xhr=j();
 	var state={"len":len, "doneFn":doneFn, "ts": Date.now()};
-	xhr.open("GET", api_base + "test.cgi?len="+len+"&nocache="+Math.floor(Math.random()*100000).toString());
+	xhr.open("GET", path);
 	xhr.onreadystatechange=function() {
 		if (xhr.readyState==4 && xhr.status>=200 && xhr.status<300) {
-			if (xhr.response.length==this.len) {
-				log("Downloaded "+this.len+" bytes successfully.");
+			if (xhr.response.length==this.len || this.len == 0) {
+				log("Downloaded "+xhr.response.length+" bytes successfully.");
 				this.doneFn(true);
 			} else {
 				log("Downloaded "+xhr.response.length+" bytes successfully, but needed "+this.len+"!");
@@ -69,6 +69,13 @@ function testDownloadCgi(len, doneFn) {
 	xhr.send();
 }
 
+function testDownloadCgi(len, doneFn) {
+	return testDownload(api_base + "test.cgi?len="+len+"&nocache="+Math.floor(Math.random()*100000).toString(), len, doneFn);
+}
+
+function testDownloadFile(path, doneFn) {
+    return testDownload(path, 0, doneFn);
+}
 
 function testUploadCgi(len, doneFn) {
 	var xhr=j();
@@ -167,27 +174,30 @@ function nextTest(lastOk) {
 		log("Testing parallel load of espfs files...");
 		testParLdImg("../cats/kitten-loves-toy.jpg", 3, nextTest);
 	} else if (tstState==2) {
+		log("Testing load espfs file which is multiple of 1024 bytes...");
+		testDownloadFile(api_base+"test2048.bin", nextTest);
+	} else if (tstState==3) {
 		log("Testing GET request of 32K...");
 		testDownloadCgi(32*1024, nextTest);
-	} else if (tstState==3) {
+	} else if (tstState==4) {
 		log("Testing GET request of 128K...");
 		testDownloadCgi(128*1024, nextTest);
-	} else if (tstState==4) {
+	} else if (tstState==5) {
 		log("Testing GET request of 512K...");
 		testDownloadCgi(512*1024, nextTest);
-	} else if (tstState==5) {
+	} else if (tstState==6) {
 		log("Testing POST request of 512 bytes...");
 		testUploadCgi(512, nextTest);
-	} else if (tstState==6) {
+	} else if (tstState==7) {
 		log("Testing POST request of 16K bytes...");
 		testUploadCgi(16*1024, nextTest);
-	} else if (tstState==7) {
+	} else if (tstState==8) {
 		log("Testing POST request of 512K bytes...");
 		testUploadCgi(512*1024, nextTest);
-	} else if (tstState==8) {
+	} else if (tstState==9) {
 		log("Hammering webserver with 500 requests of size 512...");
 		testHammer(500, 3, 512, nextTest);
-	} else if (tstState==9) {
+	} else if (tstState==10) {
 		log("Hammering webserver with 500 requests of size 2048...");
 		testHammer(500, 3, 2048, nextTest);
 	} else {
