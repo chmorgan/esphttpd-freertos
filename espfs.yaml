@@ -1,0 +1,10 @@
+process:
+  '*.css':
+  - uglifycss
+  '*.js':
+  - babel-convert
+  - babel-minify
+  '*.html':
+  - html-minifier
+  '*':
+  - heatshrink

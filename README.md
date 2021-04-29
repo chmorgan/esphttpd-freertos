@@ -1,4 +1,4 @@
-This is an example of how to use [libesphttpd](https://github.com/chmorgan/libesphttpd) on ESP32 with the Espressif FreeRTOS SDK [ESP-IDF](https://github.com/espressif/esp-idf).
+This is an example of how to use [libesphttpd](https://github.com/chmorgan/libesphttpd) with the Espressif FreeRTOS SDK [ESP-IDF](https://github.com/espressif/esp-idf).
 
 # Example Features
 ![WiFi GUI](doc/index_GUI.png)
@@ -10,13 +10,29 @@ This is an example of how to use [libesphttpd](https://github.com/chmorgan/libes
 ## File Upload/Download GUI
 ![WiFi GUI](doc/VFS_GUI.png)
 
-# ESP32
+# ESP32 (ESP-IDF)
 
 Set-up your build environment by following the [instructions](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html)
 
 After cloning this repository, ensure that you have updated submodules appropriately:
 
 ```git submodule update --init --recursive```
+
+## CMAKE Build
+If you wish to use CMake, you should make sure you have cmake and ninja-build installed.  While not necessary, ninja-build speeds up the build process a lot.  The build and loading steps are similar:
+
+`idf.py build` and `idf.py flash monitor`
+
+## Legacy Makefile Build
+
+### Windows
+ - install node.js, choose to put it in the path
+ - edit c:\msys32\msys2_shell.cmd and add:
+```
+set MSYS2_PATH_TYPE=inherit
+set MSYSTEM=MINGW32
+```
+ - Run c:\msys32\msys2_shell.cmd
 
 Run the esp32 makefile (make sure you enable the esphttpd component) and build
 
@@ -26,11 +42,7 @@ Load onto your esp32 and monitor
 
 ```make flash monitor```
 
-If you wish to use CMake, you should make sure you have cmake and ninja-build installed.  While not necessary, ninja-build speeds up the build process a lot.  The build and loading steps are similar:
-
-`idf.py build` and `idf.py flash monitor`
-
-## Tips
+### Tips
 Make sure the ```ESP_IDF``` environment variable is set.   
 ``` export IDF_PATH=/home/user/esp-idf ``` (replace the path as appropriate)
 
